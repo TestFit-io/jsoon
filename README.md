@@ -1,5 +1,5 @@
-# jsoon
-JSON library for structured data
+# JSOON - JavaScript Ordered Object Notation
+A JSON library for structured data
 
 For the cases when you just want to read/write C structs to/from JSON with 0 dynamic allocations.
 
