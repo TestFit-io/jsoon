@@ -249,7 +249,10 @@ bool json_write_array_end(json_t *json)
 
 bool json_write_bool(json_t *json, const char *label, bool val)
 {
-	return json_write_str(json, label, val ? "true" : "false");
+	return json__write_label(json, label)
+	    &&   val
+	       ? json->io.fwrite("true", 1, 4, json->user) == 4
+	       : json->io.fwrite("false", 1, 5, json->user) == 5;
 }
 
 bool json_write_int32(json_t *json, const char *label, int32_t val)
@@ -352,7 +355,7 @@ void json__skip_whitespace(json_t *json)
 }
 
 static
-bool json__read_label_characters(json_t *json, const char *label)
+bool json__read_exact(json_t *json, const char *label)
 {
 	const char *p = label;
 	while (*p != 0) {
@@ -377,7 +380,7 @@ bool json__read_label(json_t *json, const char *label)
 		return true;
 
 	return json__read_past_whitespace(json) == '"'
-	    && json__read_label_characters(json, label)
+	    && json__read_exact(json, label)
 	    && json__read_past_whitespace(json) == '"'
 	    && json__read_past_whitespace(json) == ':';
 }
@@ -466,16 +469,15 @@ bool json_read_array_end(json_t *json)
 
 bool json_read_bool(json_t *json, const char *label, bool *val)
 {
-	char str[6];
-	if (!json_read_str(json, label, str, 6)) {
+	if (!json__read_label(json, label))
 		return false;
-	} else if (strcmp(str, "true") == 0) {
-		*val = true;
-		return true;
-	} else if (strcmp(str, "false") == 0) {
-		*val = false;
-		return true;
-	} else {
+
+	switch (json__read_past_whitespace(json)) {
+	case 't':
+	  return json__read_exact(json, "rue");
+	case 'f':
+	  return json__read_exact(json, "alse");
+	default:
 		return false;
 	}
 }
