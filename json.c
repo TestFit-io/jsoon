@@ -5,12 +5,103 @@
 #include <string.h>
 #include "json.h"
 
-/* writing */
+/* initialization */
+
+#define json__min(a, b) ((a) < (b) ? (a) : (b))
 
 static
-void json__init(json_t *json, FILE *fp)
+int json__mem_fgetc(void *user)
 {
-	json->fp = fp;
+	json_mem_t *mem = user;
+	return mem->pos < mem->len ? mem->buf[mem->pos++] : EOF;
+}
+
+static
+int json__mem_ungetc(int c, void *user)
+{
+	json_mem_t *mem = user;
+	return mem->pos > 0 && mem->buf[mem->pos-1] == c ? (mem->pos--, c) : EOF;
+}
+
+static
+size_t json__mem_fread(void *ptr, size_t size, size_t nmemb, void *user)
+{
+	assert(size == 1);
+	json_mem_t *mem = user;
+	const size_t len = json__min(nmemb, mem->len - mem->pos);
+	memcpy(ptr, &mem->buf[mem->pos], len);
+	mem->pos += len;
+	return len;
+}
+
+static
+size_t json__mem_fwrite(const void *ptr, size_t size, size_t nmemb, void *user)
+{
+	assert(size == 1);
+	json_mem_t *mem = user;
+	const size_t len = json__min(nmemb, mem->len - mem->pos);
+	memcpy(&mem->buf[mem->pos], ptr, len);
+	mem->pos += len;
+	return len;
+}
+
+static
+int json__mem_fputc(int c, void *user)
+{
+	json_mem_t *mem = user;
+	return mem->pos < mem->len ? (mem->buf[mem->pos++] = c) : EOF;
+}
+
+static
+int json__file_fgetc(void *user)
+{
+	return fgetc(user);
+}
+
+static
+int json__file_ungetc(int c, void *user)
+{
+	return ungetc(c, user);
+}
+
+static
+size_t json__file_fread(void *ptr, size_t size, size_t nmemb, void *user)
+{
+	return fread(ptr, size, nmemb, user);
+}
+
+static
+size_t json__file_fwrite(const void *ptr, size_t size, size_t nmemb, void *user)
+{
+	return fwrite(ptr, size, nmemb, user);
+}
+
+static
+int json__file_fputc(int c, void *user)
+{
+	return fputc(c, user);
+}
+
+const json_io_t g_json_io_mem = {
+	.fgetc  = json__mem_fgetc,
+	.ungetc = json__mem_ungetc,
+	.fread  = json__mem_fread,
+	.fwrite = json__mem_fwrite,
+	.fputc  = json__mem_fputc,
+};
+
+const json_io_t g_json_io_file = {
+	.fgetc  = json__file_fgetc,
+	.ungetc = json__file_ungetc,
+	.fread  = json__file_fread,
+	.fwrite = json__file_fwrite,
+	.fputc  = json__file_fputc,
+};
+
+void json_init(json_t *json, json_io_t io, void *user)
+{
+	json->user = user;
+	json->io = io;
 	json->indent = 0;
 	json->root.n = 0;
 	json->root.is_array = true;
@@ -18,23 +109,23 @@ void json__init(json_t *json, FILE *fp)
 	json->cur = &json->root;
 }
 
-void json_write_begin(json_t *json, FILE *fp)
+void json_init_file(json_t *json, FILE *fp)
 {
-	json__init(json, fp);
-	json_write_object_begin(json, "root", &json->root);
+	json_init(json, g_json_io_file, fp);
 }
 
-void json_write_end(json_t *json)
+void json_init_mem(json_t *json, json_mem_t *mem)
 {
-	assert(json->indent == 1);
-	json_write_object_end(json);
+	json_init(json, g_json_io_mem, mem);
 }
+
+/* writing */
 
 static
 void json__write_newline(json_t *json)
 {
 #ifdef JSON_PRETTY_PRINT
-	fputc('\n', json->fp);
+	json->io.fputc('\n', json->user);
 #endif
 }
 
@@ -42,8 +133,9 @@ static
 void json__write_member_separator(json_t *json)
 {
 	if (json->cur->n > 0)
-		fputc(',', json->fp);
-	json__write_newline(json);
+		json->io.fputc(',', json->user);
+	if (json->cur != &json->root)
+		json__write_newline(json);
 	++json->cur->n;
 }
 
@@ -52,24 +144,16 @@ void json__write_indent(json_t *json)
 {
 #ifdef JSON_PRETTY_PRINT
 	for (size_t i = 0; i < json->indent; ++i)
-		fputc(' ', json->fp);
+		json->io.fputc(' ', json->user);
 #endif
-}
-
-static
-void json__write_str(json_t *json, const char *str)
-{
-	fputc('"', json->fp);
-	fputs(str, json->fp);
-	fputc('"', json->fp);
 }
 
 static
 void json__write_strn(json_t *json, const char *buf, size_t n)
 {
-	fputc('"', json->fp);
-	fwrite(buf, n, 1, json->fp);
-	fputc('"', json->fp);
+	json->io.fputc('"', json->user);
+	json->io.fwrite(buf, 1, n, json->user);
+	json->io.fputc('"', json->user);
 }
 
 static
@@ -78,11 +162,11 @@ void json__write_label(json_t *json, const char *label)
 	json__write_member_separator(json);
 	json__write_indent(json);
 	if (!json->cur->is_array) {
-		json__write_str(json, label);
+		json__write_strn(json, label, strlen(label));
 #ifdef JSON_PRETTY_PRINT
-		fputs(": ", json->fp);
+		json->io.fwrite(": ", 1, 2, json->user);
 #else
-		fputs(":", json->fp);
+		json->io.fputc(':', json->user);
 #endif
 	}
 }
@@ -106,7 +190,7 @@ void json__write_object_begin(json_t *json, const char *label,
 	const char open[] = { '{', '[' };
 
 	json__write_label(json, label);
-	fputc(open[is_array], json->fp);
+	json->io.fputc(open[is_array], json->user);
 	json__push_obj(json, obj, is_array);
 }
 
@@ -125,7 +209,7 @@ void json__write_object_end(json_t *json, bool is_array)
 		json__write_indent(json);
 	}
 
-	fputc(close[is_array], json->fp);
+	json->io.fputc(close[is_array], json->user);
 
 	json->cur = json->cur->prev;
 }
@@ -157,38 +241,56 @@ void json_write_bool(json_t *json, const char *label, bool val)
 
 void json_write_int32(json_t *json, const char *label, int32_t val)
 {
+	char str[64];
+	int len = sprintf(str, "%" PRId32, val);
+	assert(len < 64);
 	json__write_label(json, label);
-	fprintf(json->fp, "%" PRId32, val);
+	json->io.fwrite(str, 1, len, json->user);
 }
 
 void json_write_uint32(json_t *json, const char *label, uint32_t val)
 {
+	char str[64];
+	int len = sprintf(str, "%" PRIu32, val);
+	assert(len < 64);
 	json__write_label(json, label);
-	fprintf(json->fp, "%" PRIu32, val);
+	json->io.fwrite(str, 1, len, json->user);
 }
 
 void json_write_float(json_t *json, const char *label, float val)
 {
+	char str[64];
+	int len = sprintf(str, "%f", val);
+	assert(len < 64);
 	json__write_label(json, label);
-	fprintf(json->fp, "%f", val);
+	json->io.fwrite(str, 1, len, json->user);
 }
 
 void json_write_int64(json_t *json, const char *label, int64_t val)
 {
+	char str[64];
+	int len = sprintf(str, "%" PRId64, val);
+	assert(len < 64);
 	json__write_label(json, label);
-	fprintf(json->fp, "%" PRId64, val);
+	json->io.fwrite(str, 1, len, json->user);
 }
 
 void json_write_uint64(json_t *json, const char *label, uint64_t val)
 {
+	char str[64];
+	int len = sprintf(str, "%" PRIu64, val);
+	assert(len < 64);
 	json__write_label(json, label);
-	fprintf(json->fp, "%" PRIu64, val);
+	json->io.fwrite(str, 1, len, json->user);
 }
 
 void json_write_double(json_t *json, const char *label, double val)
 {
+	char str[64];
+	int len = sprintf(str, "%f", val);
+	assert(len < 64);
 	json__write_label(json, label);
-	fprintf(json->fp, "%f", val);
+	json->io.fwrite(str, 1, len, json->user);
 }
 
 void json_write_char(json_t *json, const char *label, char val)
@@ -200,7 +302,7 @@ void json_write_char(json_t *json, const char *label, char val)
 void json_write_str(json_t *json, const char *label, const char *val)
 {
 	json__write_label(json, label);
-	json__write_str(json, val);
+	json__write_strn(json, val, strlen(val));
 }
 
 void json_write_strn(json_t *json, const char *label, const char *val, size_t n)
@@ -213,35 +315,35 @@ void json_write_strn(json_t *json, const char *label, const char *val, size_t n)
 /* reading */
 
 static
-char json__read_past_whitespace(FILE *fp)
+char json__read_past_whitespace(json_t *json)
 {
 #ifdef JSON_PRETTY_PRINT
 	int c;
-	while ((c = fgetc(fp)) != EOF && isspace(c))
+	while ((c = json->io.fgetc(json->user)) != EOF && isspace(c))
 		;
 	return c;
 #else
-	return fgetc(fp);
+	return json->io.fgetc(json->user);
 #endif
 }
 
 static
-void json__skip_whitespace(FILE *fp)
+void json__skip_whitespace(json_t *json)
 {
 #ifdef JSON_PRETTY_PRINT
 	int c;
-	while ((c = fgetc(fp)) != EOF && isspace(c))
+	while ((c = json->io.fgetc(json->user)) != EOF && isspace(c))
 		;
-	ungetc(c, fp);
+	json->io.ungetc(c, json->user);
 #endif
 }
 
 static
-bool json__read_label_characters(FILE *fp, const char *label)
+bool json__read_label_characters(json_t *json, const char *label)
 {
 	const char *p = label;
 	while (*p != 0) {
-		const char c = fgetc(fp);
+		const char c = json->io.fgetc(json->user);
 		if (*p != c)
 			return false;
 		++p;
@@ -253,7 +355,7 @@ bool json__read_label_characters(FILE *fp, const char *label)
 static
 bool json__read_label(json_t *json, const char *label)
 {
-	if (json->cur->n > 0 && json__read_past_whitespace(json->fp) != ',')
+	if (json->cur->n > 0 && json__read_past_whitespace(json) != ',')
 		return false;
 
 	++json->cur->n;
@@ -261,35 +363,35 @@ bool json__read_label(json_t *json, const char *label)
 	if (json->cur->is_array)
 		return true;
 
-	return json__read_past_whitespace(json->fp) == '"'
-	    && json__read_label_characters(json->fp, label)
-	    && json__read_past_whitespace(json->fp) == '"'
-	    && json__read_past_whitespace(json->fp) == ':';
+	return json__read_past_whitespace(json) == '"'
+	    && json__read_label_characters(json, label)
+	    && json__read_past_whitespace(json) == '"'
+	    && json__read_past_whitespace(json) == ':';
 }
 
 
 static
-bool json__read_str(FILE *fp, char *str, size_t max)
+bool json__read_str(json_t *json, char *str, size_t max)
 {
 	char *end = str + max;
 	char *p = str;
-	while ((*p = fgetc(fp)) != EOF && *p != '"' && p != end)
+	while ((*p = json->io.fgetc(json->user)) != EOF && *p != '"' && p != end)
 		++p;
-	ungetc(*p, fp);
+	json->io.ungetc(*p, json->user);
 	*p = 0;
 	return p != end;
 }
 
 static
-bool json__read_digits(FILE *fp, char *str, size_t max)
+bool json__read_digits(json_t *json, char *str, size_t max)
 {
 	char *end = str + max;
 	char *p = str;
-	while (   (*p = fgetc(fp)) != EOF
+	while (   (*p = json->io.fgetc(json->user)) != EOF
 	       && (isdigit(*p) || *p == '-' || *p == '.')
 	       && p != end)
 		++p;
-	ungetc(*p, fp);
+	json->io.ungetc(*p, json->user);
 	if (p > str && p < end) {
 		*p = 0;
 		return true;
@@ -304,21 +406,9 @@ bool json__read_num(json_t *json, const char *label, char buf[64])
 	if (!json__read_label(json, label))
 		return false;
 
-	json__skip_whitespace(json->fp);
+	json__skip_whitespace(json);
 
-	return json__read_digits(json->fp, buf, 64);
-}
-
-bool json_read_begin(json_t *json, FILE *fp)
-{
-	json__init(json, fp);
-	return json_read_object_begin(json, "root", &json->root);
-}
-
-bool json_read_end(json_t *json)
-{
-	assert(json->indent == 1);
-	return json_read_object_end(json);
+	return json__read_digits(json, buf, 64);
 }
 
 bool json_read_member_label(json_t *json, const char *label)
@@ -333,7 +423,7 @@ bool json_read_object_begin(json_t *json, const char *label, json_obj_t *obj)
 
 	json__push_obj(json, obj, false);
 
-	return json__read_past_whitespace(json->fp) == '{';
+	return json__read_past_whitespace(json) == '{';
 }
 
 bool json_read_object_end(json_t *json)
@@ -341,7 +431,7 @@ bool json_read_object_end(json_t *json)
 	assert(json->indent > 0);
 	json->cur = json->cur->prev;
 	--json->indent;
-	return json__read_past_whitespace(json->fp) == '}';
+	return json__read_past_whitespace(json) == '}';
 }
 
 bool json_read_array_begin(json_t *json, const char *label, json_obj_t *obj)
@@ -351,14 +441,14 @@ bool json_read_array_begin(json_t *json, const char *label, json_obj_t *obj)
 
 	json__push_obj(json, obj, true);
 
-	return json__read_past_whitespace(json->fp) == '[';
+	return json__read_past_whitespace(json) == '[';
 }
 
 bool json_read_array_end(json_t *json)
 {
 	json->cur = json->cur->prev;
 	--json->indent;
-	return json__read_past_whitespace(json->fp) == ']';
+	return json__read_past_whitespace(json) == ']';
 }
 
 bool json_read_bool(json_t *json, const char *label, bool *val)
@@ -488,15 +578,15 @@ bool json_read_char(json_t *json, const char *label, char *val)
 bool json_read_str(json_t *json, const char *label, char *val, size_t max)
 {
 	return json__read_label(json, label)
-	    && json__read_past_whitespace(json->fp) == '"'
-	    && json__read_str(json->fp, val, max)
-	    && fgetc(json->fp) == '"';
+	    && json__read_past_whitespace(json) == '"'
+	    && json__read_str(json, val, max)
+	    && json->io.fgetc(json->user) == '"';
 }
 
 bool json_read_strn(json_t *json, const char *label, char *val, size_t n)
 {
 	return json__read_label(json, label)
-	    && json__read_past_whitespace(json->fp) == '"'
-	    && fread(val, 1, n, json->fp) == n
-	    && fgetc(json->fp) == '"';
+	    && json__read_past_whitespace(json) == '"'
+	    && json->io.fread(val, 1, n, json->user) == n
+	    && json->io.fgetc(json->user) == '"';
 }

@@ -1,4 +1,5 @@
 #include "json.h"
+#include <string.h>
 
 struct obj
 {
@@ -9,12 +10,16 @@ struct obj
 	} points[8];
 };
 
+static const char *g_str = "{\"n\": 4,\"points\": [{\"x\": 0,\"y\": 0},{\"x\": 10,\"y\": 0},{\"x\": 10,\"y\": 10},{\"x\": 0,\"y\": 10}]}";
+
 /* error checking omitted for brevity */
-int obj_read(FILE *fp, struct obj *obj)
+int obj_read(const char *str, size_t len, struct obj *obj)
 {
 	json_t json;
-	json_obj_t list, elem;
-	json_read_begin(&json, fp);
+	json_mem_t mem = { .buf = (char*)str, .len = len };
+	json_obj_t root, list, elem;
+	json_init_mem(&json, &mem);
+	json_read_object_begin(&json, "root", &root);
 	json_read_uint64(&json, "n", &obj->n);
 	json_read_array_begin(&json, "points", &list);
 	for (uint64_t i = 0; i < obj->n; ++i) {
@@ -24,15 +29,16 @@ int obj_read(FILE *fp, struct obj *obj)
 		json_read_object_end(&json);
 	}
 	json_read_array_end(&json);
-	json_read_end(&json);
+	json_read_object_end(&json);
 	return 0;
 }
 
 int obj_write(FILE *fp, const struct obj *obj)
 {
 	json_t json;
-	json_obj_t list, elem;
-	json_write_begin(&json, fp);
+	json_obj_t root, list, elem;
+	json_init_file(&json, fp);
+	json_write_object_begin(&json, "root", &root);
 	json_write_uint64(&json, "n", obj->n);
 	json_write_array_begin(&json, "points", &list);
 	for (uint64_t i = 0; i < obj->n; ++i) {
@@ -42,30 +48,17 @@ int obj_write(FILE *fp, const struct obj *obj)
 		json_write_object_end(&json);
 	}
 	json_write_array_end(&json);
-	json_write_end(&json);
+	json_write_object_end(&json);
 	return 0;
 }
 
 int main(void)
 {
 	struct obj obj;
-	FILE *in, *out;
 
-	in = fopen("in.json", "rb");
-	if (!in) {
-		printf("failed to open infile\n");
-		return 1;
-	}
-	obj_read(in, &obj);
-	fclose(in);
-
-	out = fopen("out.json", "w");
-	if (!out) {
-		printf("failed to open outfile\n");
-		return 1;
-	}
-	obj_write(out, &obj);
-	fclose(out);
+	obj_read(g_str, strlen(g_str), &obj);
+	obj_write(stdout, &obj);
+	fputc('\n', stdout);
 
 	return 0;
 }

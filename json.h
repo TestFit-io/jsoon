@@ -8,6 +8,20 @@
 
 #define JSON_PRETTY_PRINT
 
+typedef struct json_mem
+{
+	char *buf; /* effectively const for read calls */
+	size_t pos, len;
+} json_mem_t;
+
+typedef struct json_io
+{
+	int(*fgetc)(void *user);
+	int(*ungetc)(int c, void *user);
+	size_t(*fread)(void *ptr, size_t size, size_t nmemb, void *user);
+	size_t(*fwrite)(const void *ptr, size_t size, size_t nmemb, void *user);
+	int(*fputc)(int c, void *user);
+} json_io_t;
 
 typedef struct json_obj
 {
@@ -18,14 +32,19 @@ typedef struct json_obj
 
 typedef struct json
 {
-	FILE *fp;
+	void *user;
+	json_io_t io;
 	size_t indent;
 	json_obj_t root;
 	json_obj_t *cur;
 } json_t;
 
-void json_write_begin(json_t *json, FILE *fp);
-void json_write_end(json_t *json);
+extern const json_io_t g_json_io_mem;
+extern const json_io_t g_json_io_file;
+
+void json_init(json_t *json, json_io_t io, void *user);
+void json_init_file(json_t *json, FILE *fp);
+void json_init_mem(json_t *json, json_mem_t *mem);
 
 void json_write_object_begin(json_t *json, const char *label, json_obj_t *obj);
 void json_write_object_end(json_t *json);
@@ -41,10 +60,6 @@ void json_write_double(json_t *json, const char *label, double val);
 void json_write_char(json_t *json, const char *label, char val);
 void json_write_str(json_t *json, const char *label, const char *val);
 void json_write_strn(json_t *json, const char *label, const char *val, size_t n);
-
-
-bool json_read_begin(json_t *json, FILE *fp);
-bool json_read_end(json_t *json);
 
 bool json_read_member_label(json_t *json, const char *label);
 bool json_read_object_begin(json_t *json, const char *label, json_obj_t *obj);
