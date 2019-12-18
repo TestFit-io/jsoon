@@ -25,23 +25,29 @@ bool err(const char *str)
 
 #define CHECK(func, ...) do { if (!func(__VA_ARGS__)) return err(#func); } while (0)
 
+bool obj_read_point(json_t *json, struct point *p, const char *name)
+{
+	json_obj_t elem;
+	CHECK(json_read_object_begin, json, name, &elem);
+	CHECK(json_read_int32, json, "x", &p->x);
+	CHECK(json_read_int32, json, "y", &p->y);
+	CHECK(json_read_object_end, json);
+	return true;
+}
+
 bool obj_read(const char *str, size_t len, struct obj *obj)
 {
 	json_t json;
 	json_mem_t mem = { .buf = (char*)str, .len = len };
-	json_obj_t root, list, elem;
+	json_obj_t root, list;
 	json_init_mem(&json, &mem);
-	json_read_object_begin(&json, "root", &root);
-	json_read_uint64(&json, "n", &obj->n);
-	json_read_array_begin(&json, "points", &list);
-	for (uint64_t i = 0; i < obj->n; ++i) {
-		json_read_object_begin(&json, "point", &elem);
-		json_read_int32(&json, "x", &obj->points[i].x);
-		json_read_int32(&json, "y", &obj->points[i].y);
-		json_read_object_end(&json);
-	}
-	json_read_array_end(&json);
-	json_read_object_end(&json);
+	CHECK(json_read_object_begin, &json, "root", &root);
+	CHECK(json_read_uint64, &json, "n", &obj->n);
+	CHECK(json_read_array_begin, &json, "points", &list);
+	for (uint64_t i = 0; i < obj->n; ++i)
+		CHECK(obj_read_point, &json, &obj->points[i], "point");
+	CHECK(json_read_array_end, &json);
+	CHECK(json_read_object_end, &json);
 	return true;
 }
 
@@ -79,7 +85,10 @@ int main(void)
 	char *buf = malloc(len);
 	bool success = false;
 
-	obj_read(g_str, strlen(g_str), &obj);
+	if (!obj_read(g_str, strlen(g_str), &obj)) {
+		err("obj_read");
+		goto out;
+	}
 
 	while (!(success = obj_write(buf, len, &obj)) && len < 1024) {
 		err("obj_write\n");
@@ -89,5 +98,6 @@ int main(void)
 	if (success)
 		printf("%s\n", buf);
 
+out:
 	return success ? 0 : 1;
 }
