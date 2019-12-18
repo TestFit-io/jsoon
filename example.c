@@ -1,6 +1,8 @@
 #include "json.h"
 #include <string.h>
 
+/* error checking omitted for brevity */
+
 struct obj
 {
 	uint64_t n;
@@ -12,8 +14,7 @@ struct obj
 
 static const char *g_str = "{\"n\": 4,\"points\": [{\"x\": 0,\"y\": 0},{\"x\": 10,\"y\": 0},{\"x\": 10,\"y\": 10},{\"x\": 0,\"y\": 10}]}";
 
-/* error checking omitted for brevity */
-int obj_read(const char *str, size_t len, struct obj *obj)
+void obj_read(const char *str, size_t len, struct obj *obj)
 {
 	json_t json;
 	json_mem_t mem = { .buf = (char*)str, .len = len };
@@ -30,10 +31,9 @@ int obj_read(const char *str, size_t len, struct obj *obj)
 	}
 	json_read_array_end(&json);
 	json_read_object_end(&json);
-	return 0;
 }
 
-int obj_write(FILE *fp, const struct obj *obj)
+void obj_write(FILE *fp, const struct obj *obj)
 {
 	json_t json;
 	json_obj_t root, list, elem;
@@ -49,7 +49,6 @@ int obj_write(FILE *fp, const struct obj *obj)
 	}
 	json_write_array_end(&json);
 	json_write_object_end(&json);
-	return 0;
 }
 
 int main(void)
