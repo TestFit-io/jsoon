@@ -6,7 +6,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define JSON_PRETTY_PRINT
+#ifndef JSON_PRETTY_PRINT
+#define JSON_PRETTY_PRINT 1
+#endif
 
 typedef struct json_mem
 {

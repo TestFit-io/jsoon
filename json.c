@@ -124,7 +124,7 @@ void json_init_mem(json_t *json, json_mem_t *mem)
 static
 bool json__write_newline(json_t *json)
 {
-#ifdef JSON_PRETTY_PRINT
+#if JSON_PRETTY_PRINT
 	return json->io.fputc('\n', json->user) != EOF;
 #endif
 }
@@ -143,7 +143,7 @@ bool json__write_member_separator(json_t *json)
 static
 bool json__write_indent(json_t *json)
 {
-#ifdef JSON_PRETTY_PRINT
+#if JSON_PRETTY_PRINT
 	for (size_t i = 0; i < json->indent; ++i)
 		if (json->io.fputc(' ', json->user) == EOF)
 			return false;
@@ -162,7 +162,7 @@ bool json__write_strn(json_t *json, const char *buf, size_t n)
 static
 bool json__write_colon(json_t *json)
 {
-#ifdef JSON_PRETTY_PRINT
+#if JSON_PRETTY_PRINT
 	return json->io.fwrite(": ", 1, 2, json->user);
 #else
 	return json->io.fputc(':', json->user);
@@ -333,7 +333,7 @@ bool json_write_strn(json_t *json, const char *label, const char *val, size_t n)
 static
 char json__read_past_whitespace(json_t *json)
 {
-#ifdef JSON_PRETTY_PRINT
+#if JSON_PRETTY_PRINT
 	int c;
 	while ((c = json->io.fgetc(json->user)) != EOF && isspace(c))
 		;
@@ -346,7 +346,7 @@ char json__read_past_whitespace(json_t *json)
 static
 void json__skip_whitespace(json_t *json)
 {
-#ifdef JSON_PRETTY_PRINT
+#if JSON_PRETTY_PRINT
 	int c;
 	while ((c = json->io.fgetc(json->user)) != EOF && isspace(c))
 		;
