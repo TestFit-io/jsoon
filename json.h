@@ -83,4 +83,4 @@ bool json_read_char(json_t *json, const char *label, char *val);
 bool json_read_str(json_t *json, const char *label, char *val, size_t max);
 bool json_read_strn(json_t *json, const char *label, char *val, size_t n);
 
-#endif // TESTFIT_JSON_H
+#endif // JSON_H
