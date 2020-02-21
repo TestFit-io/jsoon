@@ -10,6 +10,10 @@
 #define JSON_PRETTY_PRINT 1
 #endif
 
+#ifndef JSON_INDENT_SIZE
+#define JSON_INDENT_SIZE 1
+#endif
+
 typedef struct json_mem
 {
 	char *buf; /* effectively const for read calls */

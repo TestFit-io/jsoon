@@ -145,8 +145,9 @@ bool json__write_indent(json_t *json)
 {
 #if JSON_PRETTY_PRINT
 	for (size_t i = 0; i < json->indent; ++i)
-		if (json->io.fputc(' ', json->user) == EOF)
-			return false;
+		for (size_t j = 0; j < JSON_INDENT_SIZE; ++j)
+			if (json->io.fputc(' ', json->user) == EOF)
+				return false;
 #endif
 	return true;
 }
