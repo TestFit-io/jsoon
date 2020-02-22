@@ -491,41 +491,41 @@ bool json_read_bool(json_t *json, const char *label, bool *val)
 bool json_read_int8(json_t *json, const char *label, int8_t *val)
 {
 	int32_t val32;
-	if (!json_read_int32(json, label, &val32) || val32 < INT8_MIN || val32 > INT8_MAX)
-		return false;
-
-	*val = (int8_t)val32;
-	return true;
+	if (json_read_int32(json, label, &val32) && val32 >= INT8_MIN && val32 <= INT8_MAX) {
+		*val = (int8_t)val32;
+		return true;
+	}
+	return false;
 }
 
 bool json_read_uint8(json_t *json, const char *label, uint8_t *val)
 {
 	uint32_t val32;
-	if (!json_read_uint32(json, label, &val32) || (val32 & ~0xFF))
-		return false;
-
-	*val = (uint8_t)val32;
-	return true;
+	if (json_read_uint32(json, label, &val32) && !(val32 & ~0xFF)) {
+		*val = (uint8_t)val32;
+		return true;
+	}
+	return false;
 }
 
 bool json_read_int16(json_t *json, const char *label, int16_t *val)
 {
 	int32_t val32;
-	if (!json_read_int32(json, label, &val32) || val32 < INT16_MIN || val32 > INT16_MAX)
-		return false;
-
-	*val = (int16_t)val32;
-	return true;
+	if (json_read_int32(json, label, &val32) && val32 >= INT16_MIN && val32 <= INT16_MAX) {
+		*val = (int16_t)val32;
+		return true;
+	}
+	return false;
 }
 
 bool json_read_uint16(json_t *json, const char *label, uint16_t *val)
 {
 	uint32_t val32;
-	if (!json_read_uint32(json, label, &val32) || (val32 & ~0xFFFF))
-		return false;
-
-	*val = (uint16_t)val32;
-	return true;
+	if (json_read_uint32(json, label, &val32) && !(val32 & ~0xFFFF)) {
+		*val = (uint16_t)val32;
+		return true;
+	}
+	return false;
 }
 
 bool json_read_int32(json_t *json, const char *label, int32_t *val)
