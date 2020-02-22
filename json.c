@@ -475,12 +475,17 @@ bool json_read_bool(json_t *json, const char *label, bool *val)
 
 	switch (json__read_past_whitespace(json)) {
 	case 't':
-	  return json__read_exact(json, "rue");
+	  if (json__read_exact(json, "rue")) {
+			*val = true;
+			return true;
+		}
 	case 'f':
-	  return json__read_exact(json, "alse");
-	default:
-		return false;
+	  if (json__read_exact(json, "alse")) {
+			*val = false;
+			return true;
+		}
 	}
+	return false;
 }
 
 bool json_read_int8(json_t *json, const char *label, int8_t *val)
