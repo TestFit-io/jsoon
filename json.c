@@ -161,6 +161,55 @@ bool json__write_strn(json_t *json, const char *buf, size_t n)
 }
 
 static
+bool json__write_char(json_t *json, char c)
+{
+	switch (c) {
+	case '"':
+	case '\\':
+	case '/':
+		return json->io.fputc('\\', json->user) != EOF
+		    && json->io.fputc(c,    json->user) != EOF;
+	case '\b':
+		return json->io.fputc('\\', json->user) != EOF
+		    && json->io.fputc('b',  json->user) != EOF;
+	case '\f':
+		return json->io.fputc('\\', json->user) != EOF
+		    && json->io.fputc('f',  json->user) != EOF;
+	case '\n':
+		return json->io.fputc('\\', json->user) != EOF
+		    && json->io.fputc('n',  json->user) != EOF;
+	case '\r':
+		return json->io.fputc('\\', json->user) != EOF
+		    && json->io.fputc('r',  json->user) != EOF;
+	case '\t':
+		return json->io.fputc('\\', json->user) != EOF
+		    && json->io.fputc('t',  json->user) != EOF;
+	default:
+		return json->io.fputc(c, json->user) != EOF;
+	}
+}
+
+static
+bool json__write_str_(json_t *json, const char *buf)
+{
+	const char *p = buf;
+	while (*p) {
+		if (!json__write_char(json, *p))
+			return false;
+		++p;
+	}
+	return true;
+}
+
+static
+bool json__write_str(json_t *json, const char *buf)
+{
+	return json->io.fputc('"', json->user) != EOF
+	    && json__write_str_(json, buf)
+	    && json->io.fputc('"', json->user) != EOF;
+}
+
+static
 bool json__write_colon(json_t *json)
 {
 #if JSON_PRETTY_PRINT
@@ -319,7 +368,7 @@ bool json_write_char(json_t *json, const char *label, char val)
 bool json_write_str(json_t *json, const char *label, const char *val)
 {
 	return json__write_label(json, label)
-	    && json__write_strn(json, val, strlen(val));
+	    && json__write_str(json, val);
 }
 
 bool json_write_strn(json_t *json, const char *label, const char *val, size_t n)
@@ -328,6 +377,11 @@ bool json_write_strn(json_t *json, const char *label, const char *val, size_t n)
 	    && json__write_strn(json, val, n);
 }
 
+bool json_write_str_unescaped(json_t *json, const char *label, const char *val)
+{
+	return json__write_label(json, label)
+	    && json__write_strn(json, val, strlen(val));
+}
 
 /* reading */
 
@@ -388,15 +442,146 @@ bool json__read_label(json_t *json, const char *label)
 
 
 static
+bool json__read_hex4(json_t *json, uint32_t *hex)
+{
+	*hex = 0;
+	for (uint32_t i = 0; i < 4; ++i) {
+		const char c = json->io.fgetc(json->user);
+		if (c >= '0' && c <= '9')
+			*hex |= (uint32_t)(c - '0' +  0) << ((4 - i - 1) * 4);
+		else if (c >= 'a' && c <= 'f')
+			*hex |= (uint32_t)(c - 'a' + 10) << ((4 - i - 1) * 4);
+		else if (c >= 'A' && c <= 'F')
+			*hex |= (uint32_t)(c - 'A' + 10) << ((4 - i - 1) * 4);
+		else
+			return false;
+	}
+	return true;
+}
+
+static
+bool json__hex_to_utf8(uint32_t val, char *str, size_t max, size_t *advance)
+{
+	if (val < (1 << 7)) {
+		if (max >= 1) {
+			str[0] = (char)val;
+			*advance = 1;
+			return true;
+		}
+	} else if (val < (1 << 11)) {
+		if (max >= 2) {
+			str[0] = 0xc0 | ((val >> 6) & 0x1f);
+			str[1] = 0x80 | ((val >> 0) & 0x3f);
+			*advance = 2;
+			return true;
+		}
+	} else if (val < (1 << 16)) {
+		if (max >= 3) {
+			str[0] = 0xe0 | ((val >> 12) & 0x0f);
+			str[1] = 0x80 | ((val >>  6) & 0x3f);
+			str[2] = 0x80 | ((val >>  0) & 0x3f);
+			*advance = 3;
+			return true;
+		}
+	} else if (val < (1 << 21)) {
+		if (max >= 4) {
+			str[0] = 0xf0 | ((val >> 18) & 0x07);
+			str[1] = 0x80 | ((val >> 12) & 0x3f);
+			str[2] = 0x80 | ((val >>  6) & 0x3f);
+			str[3] = 0x80 | ((val >>  0) & 0x3f);
+			*advance = 4;
+			return true;
+		}
+	}
+	return false;
+}
+
+static
+bool json__read_utf8_from_hex(json_t *json, char *str, size_t max, size_t *advance)
+{
+	uint32_t hex;
+	return json__read_hex4(json, &hex)
+	    && json__hex_to_utf8(hex, str, max, advance);
+}
+
+static
+bool json__read_escape(json_t *json, char *str, size_t max, size_t *advance)
+{
+	const char c = json->io.fgetc(json->user);
+	assert(max >= 1);
+	switch (c) {
+	case '"':
+	case '\\':
+	case '/':
+		*advance = 1;
+		str[0] = c;
+		return true;
+	case 'b':
+		*advance = 1;
+		str[0] = '\b';
+		return true;
+	case 'f':
+		*advance = 1;
+		str[0] = '\f';
+		return true;
+	case 'n':
+		*advance = 1;
+		str[0] = '\n';
+		return true;
+	case 'r':
+		*advance = 1;
+		str[0] = '\r';
+		return true;
+	case 't':
+		*advance = 1;
+		str[0] = '\t';
+		return true;
+	case 'u':
+		return json__read_utf8_from_hex(json, str, max, advance);
+	default:
+		return false;
+	}
+}
+
+static
+bool json__read_char(json_t *json, char *str, size_t max, size_t *advance, bool *end)
+{
+	const char c = json->io.fgetc(json->user);
+	if (c == EOF || (c & 0xfc) == 0 || max == 0) {
+		return false;
+	} else if (c == '"') {
+		*end = true;
+		return false;
+	} else if (c == '\\') {
+		return json__read_escape(json, str, max, advance);
+	} else {
+		str[0] = c;
+		*advance = 1;
+		return true;
+	}
+}
+
+static
 bool json__read_str(json_t *json, char *str, size_t max)
 {
-	char *end = str + max;
+	size_t remaining = max, advance;
 	char *p = str;
-	while ((*p = json->io.fgetc(json->user)) != EOF && *p != '"' && p != end)
-		++p;
-	json->io.ungetc(*p, json->user);
-	*p = 0;
-	return p != end;
+	bool end;
+
+	while (json__read_char(json, p, remaining, &advance, &end)) {
+		p         += advance;
+		remaining -= advance;
+	}
+
+	if (end) {
+		json->io.ungetc('"', json->user);
+		if (remaining > 0) {
+			*p = 0;
+			return true;
+		}
+	}
+
+	return false;
 }
 
 static

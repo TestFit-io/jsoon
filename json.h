@@ -66,6 +66,7 @@ bool json_write_double(json_t *json, const char *label, double val);
 bool json_write_char(json_t *json, const char *label, char val);
 bool json_write_str(json_t *json, const char *label, const char *val);
 bool json_write_strn(json_t *json, const char *label, const char *val, size_t n);
+bool json_write_str_unescaped(json_t *json, const char *label, const char *val);
 
 bool json_read_member_label(json_t *json, const char *label);
 bool json_read_object_begin(json_t *json, const char *label, json_obj_t *obj);
