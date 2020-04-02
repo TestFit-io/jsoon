@@ -23,6 +23,5 @@ For data that is primarily dictated by one piece of software, these concerns out
 # Known issues
 
 - null values are not handled
-- escape characters and out-of-range characters in strings are not handled
 - numbers with exponents are not handled
 - number parsing is simplistic & will allow non-digit characters in places it shouldn't
