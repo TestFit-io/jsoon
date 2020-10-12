@@ -41,6 +41,7 @@ typedef struct json
 	void *user;
 	json_io_t io;
 	size_t indent;
+	size_t line;
 	json_obj_t root;
 	json_obj_t *cur;
 } json_t;

@@ -103,6 +103,7 @@ void json_init(json_t *json, json_io_t io, void *user)
 	json->user = user;
 	json->io = io;
 	json->indent = 0;
+	json->line = 1;
 	json->root.n = 0;
 	json->root.is_array = true;
 	json->root.prev = NULL;
@@ -125,6 +126,7 @@ static
 bool json__write_newline(json_t *json)
 {
 #if JSON_PRETTY_PRINT
+	++json->line;
 	return json->io.fputc('\n', json->user) != EOF;
 #endif
 }
@@ -391,7 +393,7 @@ char json__read_past_whitespace(json_t *json)
 #if JSON_PRETTY_PRINT
 	int c;
 	while ((c = json->io.fgetc(json->user)) != EOF && isspace(c))
-		;
+		json->line += c == '\n';
 	return c;
 #else
 	return json->io.fgetc(json->user);
@@ -404,7 +406,7 @@ void json__skip_whitespace(json_t *json)
 #if JSON_PRETTY_PRINT
 	int c;
 	while ((c = json->io.fgetc(json->user)) != EOF && isspace(c))
-		;
+		json->line += c == '\n';
 	json->io.ungetc(c, json->user);
 #endif
 }
