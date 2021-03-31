@@ -128,6 +128,8 @@ bool json__write_newline(json_t *json)
 #if JSON_PRETTY_PRINT
 	++json->line;
 	return json->io.fputc('\n', json->user) != EOF;
+#else
+	return true;
 #endif
 }
 
