@@ -570,7 +570,7 @@ bool json__read_str(json_t *json, char *str, size_t max)
 {
 	size_t remaining = max, advance;
 	char *p = str;
-	bool end;
+	bool end = false;
 
 	while (json__read_char(json, p, remaining, &advance, &end)) {
 		p         += advance;
