@@ -547,49 +547,79 @@ bool json__read_escape(json_t *json, char *str, size_t max, size_t *advance)
 	}
 }
 
+#define JSON__READ_STR_ERROR_NONE 0
+#define JSON__READ_STR_ERROR_MORE 1
+#define JSON__READ_STR_ERROR_DATA -1
+
 static
-bool json__read_char(json_t *json, char *str, size_t max, size_t *advance, bool *end)
+bool json__read_char(json_t *json, char *str, size_t max, size_t *advance, bool part, int *err)
 {
+	/* Allow 5 bytes for a 4-byte utf8 character and the NULL terminator.
+	 * This may cause us to slightly over-allocate by a small margin, but
+	 * it simplifies the logic greatly. */
+	if (part && max < 5) {
+		*err = JSON__READ_STR_ERROR_MORE;
+		return false;
+	}
+
 	const char c = json->io.fgetc(json->user);
 	if (c == EOF || (c & 0xfc) == 0 || max == 0) {
+		*err = JSON__READ_STR_ERROR_DATA;
 		return false;
 	} else if (c == '"') {
-		*end = true;
+		*err = JSON__READ_STR_ERROR_NONE;
 		return false;
-	} else if (c == '\\') {
-		return json__read_escape(json, str, max, advance);
-	} else {
+	} else if (c != '\\') {
 		str[0] = c;
 		*advance = 1;
 		return true;
+	} else if (json__read_escape(json, str, max, advance)) {
+		assert(*advance < 5);
+		return true;
+	} else {
+		*err = JSON__READ_STR_ERROR_DATA;
+		return false;
 	}
 }
 
-static
-bool json__read_str(json_t *json, char *str, size_t max)
-{
-	size_t remaining = max, advance;
-	char *p = str;
-	bool end = false;
+#define JSON__READ_STR_ONCE 0
+#define JSON__READ_STR_PART 1
 
-	while (json__read_char(json, p, remaining, &advance, &end)) {
+static
+bool json__read_str(json_t *json, char *str, size_t max, size_t *len, bool part, int *err)
+{
+	size_t remaining = max - *len, advance;
+	char *p = &str[*len];
+	bool success = false;
+
+	if (remaining == 0) {
+		*err = JSON__READ_STR_ERROR_MORE;
+		return false;
+	}
+
+	while (json__read_char(json, p, remaining, &advance, part, err)) {
 		p         += advance;
 		remaining -= advance;
 	}
 
-	if (end) {
+	if (*err == JSON__READ_STR_ERROR_NONE) {
 		json->io.ungetc('"', json->user);
 		if (remaining > 0) {
-			*p = 0;
-			return true;
+			success = true;
+		} else {
+			/* The prior remaining checks in `part` mode should prevent this case.
+			 * We can't call ungetc again here, so we have no ability to put back
+			 * the last character and NULL-terminate the rest of the string. */
+			assert(!part);
+			*err = JSON__READ_STR_ERROR_DATA;
 		}
 	}
 
-	if (remaining > 0)
-		*p = 0;
-	else
-		p[-1] = 0;
-	return false;
+	if (remaining == 0)
+		--p;
+	*p = 0;
+	*len = p - str;
+	return success;
 }
 
 static
@@ -791,9 +821,11 @@ bool json_read_char(json_t *json, const char *label, char *val)
 
 bool json_read_str(json_t *json, const char *label, char *val, size_t max)
 {
+	size_t len = 0;
+	int err;
 	return json__read_label(json, label)
 	    && json__read_past_whitespace(json) == '"'
-	    && json__read_str(json, val, max)
+	    && json__read_str(json, val, max, &len, JSON__READ_STR_ONCE, &err)
 	    && json->io.fgetc(json->user) == '"';
 }
 
@@ -803,6 +835,28 @@ bool json_read_strn(json_t *json, const char *label, char *val, size_t n)
 	    && json__read_past_whitespace(json) == '"'
 	    && json->io.fread(val, 1, n, json->user) == n
 	    && json->io.fgetc(json->user) == '"';
+}
+
+bool json_read_str_part(json_t *json, const char *label, char *val, size_t max, size_t *len, bool *more)
+{
+	int err;
+
+	// first iteration
+	if (!*more && (!json__read_label(json, label) || json__read_past_whitespace(json) != '"'))
+		return false;
+
+	if (json__read_str(json, val, max, len, JSON__READ_STR_PART, &err)) {
+		*more = false;
+		return json->io.fgetc(json->user) == '"';
+	} else if (err == JSON__READ_STR_ERROR_DATA) {
+		return false;
+	} else if (err == JSON__READ_STR_ERROR_MORE) {
+		*more = true;
+		return true;
+	} else {
+		assert(false);
+		return false;
+	}
 }
 
 bool json_peek_array_end(json_t *json)

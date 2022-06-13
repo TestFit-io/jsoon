@@ -88,6 +88,7 @@ bool json_read_double(json_t *json, const char *label, double *val);
 bool json_read_char(json_t *json, const char *label, char *val);
 bool json_read_str(json_t *json, const char *label, char *val, size_t max);
 bool json_read_strn(json_t *json, const char *label, char *val, size_t n);
+bool json_read_str_part(json_t *json, const char *label, char *val, size_t max, size_t *len, bool *more);
 
 bool json_peek_array_end(json_t *json);
 bool json_peek_data_end(json_t *json);
