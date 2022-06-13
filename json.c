@@ -585,6 +585,10 @@ bool json__read_str(json_t *json, char *str, size_t max)
 		}
 	}
 
+	if (remaining > 0)
+		*p = 0;
+	else
+		p[-1] = 0;
 	return false;
 }
 
