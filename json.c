@@ -800,3 +800,17 @@ bool json_read_strn(json_t *json, const char *label, char *val, size_t n)
 	    && json->io.fread(val, 1, n, json->user) == n
 	    && json->io.fgetc(json->user) == '"';
 }
+
+bool json_peek_array_end(json_t *json)
+{
+	char c = json__read_past_whitespace(json);
+	json->io.ungetc(c, json->user);
+	return c == ']';
+}
+
+bool json_peek_data_end(json_t *json)
+{
+	char c = json__read_past_whitespace(json);
+	json->io.ungetc(c, json->user);
+	return c == EOF;
+}
