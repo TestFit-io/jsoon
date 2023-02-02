@@ -698,12 +698,12 @@ bool json_read_bool(json_t *json, const char *label, bool *val)
 
 	switch (json__read_past_whitespace(json)) {
 	case 't':
-	  if (json__read_exact(json, "rue")) {
+		if (json__read_exact(json, "rue")) {
 			*val = true;
 			return true;
 		}
 	case 'f':
-	  if (json__read_exact(json, "alse")) {
+		if (json__read_exact(json, "alse")) {
 			*val = false;
 			return true;
 		}
