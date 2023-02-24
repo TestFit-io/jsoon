@@ -147,7 +147,7 @@ bool json__write_member_separator(json_t *json)
 static
 bool json__write_indent(json_t *json)
 {
-#if JSON_PRETTY_PRINT
+#if JSON_PRETTY_PRINT && JSON_INDENT_SIZE
 	for (size_t i = 0; i < json->indent; ++i)
 		for (size_t j = 0; j < JSON_INDENT_SIZE; ++j)
 			if (json->io.fputc(' ', json->user) == EOF)
