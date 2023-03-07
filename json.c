@@ -309,58 +309,56 @@ bool json_write_bool(json_t *json, const char *label, bool val)
 	       : json->io.fwrite("false", 1, 5, json->user) == 5;
 }
 
+static
+bool json__write_number(json_t *json, const char *label, char str[64], int len, int max)
+{
+	assert(len < max); /* If this is ever hit, the library needs a larger buffer  */
+	return len > 0
+	    && len < max
+	    && json__write_label(json, label)
+	    && json->io.fwrite(str, 1, len, json->user) == len;
+}
+
 bool json_write_int32(json_t *json, const char *label, int32_t val)
 {
 	char str[64];
 	int len = snprintf(str, 64, "%" PRId32, val);
-	assert(len < 64);
-	return json__write_label(json, label)
-	    && json->io.fwrite(str, 1, len, json->user) == len;
+	return json__write_number(json, label, str, len, 64);
 }
 
 bool json_write_uint32(json_t *json, const char *label, uint32_t val)
 {
 	char str[64];
 	int len = snprintf(str, 64, "%" PRIu32, val);
-	assert(len < 64);
-	return json__write_label(json, label)
-	    && json->io.fwrite(str, 1, len, json->user) == len;
+	return json__write_number(json, label, str, len, 64);
 }
 
 bool json_write_float(json_t *json, const char *label, float val)
 {
 	char str[64];
 	int len = snprintf(str, 64, "%f", val);
-	assert(len < 64);
-	return json__write_label(json, label)
-	    && json->io.fwrite(str, 1, len, json->user) == len;
+	return json__write_number(json, label, str, len, 64);
 }
 
 bool json_write_int64(json_t *json, const char *label, int64_t val)
 {
 	char str[64];
 	int len = snprintf(str, 64, "%" PRId64, val);
-	assert(len < 64);
-	return json__write_label(json, label)
-	    && json->io.fwrite(str, 1, len, json->user) == len;
+	return json__write_number(json, label, str, len, 64);
 }
 
 bool json_write_uint64(json_t *json, const char *label, uint64_t val)
 {
 	char str[64];
 	int len = snprintf(str, 64, "%" PRIu64, val);
-	assert(len < 64);
-	return json__write_label(json, label)
-	    && json->io.fwrite(str, 1, len, json->user) == len;
+	return json__write_number(json, label, str, len, 64);
 }
 
 bool json_write_double(json_t *json, const char *label, double val)
 {
 	char str[64];
 	int len = snprintf(str, 64, "%f", val);
-	assert(len < 64);
-	return json__write_label(json, label)
-	    && json->io.fwrite(str, 1, len, json->user) == len;
+	return json__write_number(json, label, str, len, 64);
 }
 
 bool json_write_char(json_t *json, const char *label, char val)
