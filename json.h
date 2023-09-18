@@ -58,6 +58,8 @@ bool json_write_object_end(json_t *json);
 bool json_write_array_begin(json_t *json, const char *label, json_obj_t *obj);
 bool json_write_array_end(json_t *json);
 bool json_write_bool(json_t *json, const char *label, bool val);
+bool json_write_int16(json_t *json, const char *label, int16_t val);
+bool json_write_uint16(json_t *json, const char *label, uint16_t val);
 bool json_write_int32(json_t *json, const char *label, int32_t val);
 bool json_write_uint32(json_t *json, const char *label, uint32_t val);
 bool json_write_float(json_t *json, const char *label, float val);

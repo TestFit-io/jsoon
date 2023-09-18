@@ -319,6 +319,20 @@ bool json__write_number(json_t *json, const char *label, char str[64], int len, 
 	    && json->io.fwrite(str, 1, len, json->user) == len;
 }
 
+bool json_write_int16(json_t *json, const char *label, int16_t val)
+{
+	char str[64];
+	int len = snprintf(str, 64, "%" PRId16, val);
+	return json__write_number(json, label, str, len, 64);
+}
+
+bool json_write_uint16(json_t *json, const char *label, uint16_t val)
+{
+	char str[64];
+	int len = snprintf(str, 64, "%" PRIu16, val);
+	return json__write_number(json, label, str, len, 64);
+}
+
 bool json_write_int32(json_t *json, const char *label, int32_t val)
 {
 	char str[64];
