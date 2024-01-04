@@ -291,6 +291,13 @@ bool json_write_object_end(json_t *json)
 	return json__write_object_end(json, false);
 }
 
+bool json_write_raw_value(json_t *json, const char *label, const char *value)
+{
+	const size_t n = strlen(value);
+	return json__write_label(json, label)
+	    && json->io.fwrite(value, 1, n, json->user) == n;
+}
+
 bool json_write_array_begin(json_t *json, const char *label, json_obj_t *obj)
 {
 	return json__write_object_begin(json, label, true, obj);

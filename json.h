@@ -55,6 +55,7 @@ void json_init_mem(json_t *json, json_mem_t *mem);
 
 bool json_write_object_begin(json_t *json, const char *label, json_obj_t *obj);
 bool json_write_object_end(json_t *json);
+bool json_write_raw_value(json_t *json, const char *label, const char *value);
 bool json_write_array_begin(json_t *json, const char *label, json_obj_t *obj);
 bool json_write_array_end(json_t *json);
 bool json_write_bool(json_t *json, const char *label, bool val);
