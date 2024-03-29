@@ -3,6 +3,7 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
+#include <float.h>
 #include "json.h"
 
 /* initialization */
@@ -357,7 +358,7 @@ bool json_write_uint32(json_t *json, const char *label, uint32_t val)
 bool json_write_float(json_t *json, const char *label, float val)
 {
 	char str[64];
-	int len = snprintf(str, 64, "%f", val);
+	int len = snprintf(str, 64, "%.9g", val); // FLT_DECIMAL_DIG=9
 	return json__write_number(json, label, str, len, 64);
 }
 
@@ -378,7 +379,7 @@ bool json_write_uint64(json_t *json, const char *label, uint64_t val)
 bool json_write_double(json_t *json, const char *label, double val)
 {
 	char str[64];
-	int len = snprintf(str, 64, "%f", val);
+	int len = snprintf(str, 64, "%.17g", val); // DBL_DECIMAL_DIG=17
 	return json__write_number(json, label, str, len, 64);
 }
 
@@ -642,32 +643,75 @@ bool json__read_str(json_t *json, char *str, size_t max, size_t *len, bool part,
 }
 
 static
-bool json__read_digits(json_t *json, char *str, size_t max)
+bool json__read_optional_char(json_t *json, const char *set, char *str, char *end, char **endptr)
 {
-	char *end = str + max;
+	const char c = json->io.fgetc(json->user);
+	if (c == EOF || str == end) {
+		json->io.ungetc(c, json->user);
+		return false;
+	}
+	if (strchr(set, c)) {
+		*str = c;
+		*endptr = str + 1;
+	} else {
+		json->io.ungetc(c, json->user);
+	}
+	return true;
+}
+
+
+static
+bool json__read_optional_negative(json_t *json, char *str, char *end, char **endptr)
+{
+	return json__read_optional_char(json, "-", str, end, endptr);
+}
+
+static
+bool json__read_optional_sign(json_t *json, char *str, char *end, char **endptr)
+{
+	return json__read_optional_char(json, "-+", str, end, endptr);
+}
+
+static
+bool json__read_required_char(json_t *json, const char *set, char *str, char *end, char **endptr)
+{
+	const char c = json->io.fgetc(json->user);
+	if (c == EOF || strchr(set, c) == NULL || str == end) {
+		json->io.ungetc(c, json->user);
+		return false;
+	}
+	*str = c;
+	*endptr = str + 1;
+	return true;
+}
+
+static
+bool json__read_decimal(json_t *json, char *str, char *end, char **endptr)
+{
+	return json__read_required_char(json, ".", str, end, endptr);
+}
+
+static
+bool json__read_exponent_symbol(json_t *json, char *str, char *end, char **endptr)
+{
+	return json__read_required_char(json, "eE", str, end, endptr);
+}
+
+static
+bool json__read_digits(json_t *json, char *str, char *end, char **endptr)
+{
 	char *p = str;
-	while (   (*p = json->io.fgetc(json->user)) != EOF
-	       && (isdigit(*p) || *p == '-' || *p == '.')
+	char c;
+	while (   (c = json->io.fgetc(json->user)) != EOF
+	       && isdigit(c)
 	       && p != end)
-		++p;
-	json->io.ungetc(*p, json->user);
+		*p++ = c;
+	json->io.ungetc(c, json->user);
 	if (p > str && p < end) {
-		*p = 0;
+		*endptr = p;
 		return true;
 	}
 	return false;
-}
-
-/* 20 digits can hold 2^64-1, so 64 should be plenty */
-static
-bool json__read_num(json_t *json, const char *label, char buf[64])
-{
-	if (!json__read_label(json, label))
-		return false;
-
-	json__skip_whitespace(json);
-
-	return json__read_digits(json, buf, 64);
 }
 
 bool json_read_member_label(json_t *json, const char *label)
@@ -732,9 +776,9 @@ bool json_read_bool(json_t *json, const char *label, bool *val)
 
 bool json_read_int8(json_t *json, const char *label, int8_t *val)
 {
-	int32_t val32;
-	if (json_read_int32(json, label, &val32) && val32 >= INT8_MIN && val32 <= INT8_MAX) {
-		*val = (int8_t)val32;
+	int64_t val64;
+	if (json_read_int64(json, label, &val64) && val64 >= INT8_MIN && val64 <= INT8_MAX) {
+		*val = (int8_t)val64;
 		return true;
 	}
 	return false;
@@ -742,9 +786,9 @@ bool json_read_int8(json_t *json, const char *label, int8_t *val)
 
 bool json_read_uint8(json_t *json, const char *label, uint8_t *val)
 {
-	uint32_t val32;
-	if (json_read_uint32(json, label, &val32) && !(val32 & ~0xFF)) {
-		*val = (uint8_t)val32;
+	uint64_t val64;
+	if (json_read_uint64(json, label, &val64) && val64 <= UINT8_MAX) {
+		*val = (uint8_t)val64;
 		return true;
 	}
 	return false;
@@ -752,9 +796,9 @@ bool json_read_uint8(json_t *json, const char *label, uint8_t *val)
 
 bool json_read_int16(json_t *json, const char *label, int16_t *val)
 {
-	int32_t val32;
-	if (json_read_int32(json, label, &val32) && val32 >= INT16_MIN && val32 <= INT16_MAX) {
-		*val = (int16_t)val32;
+	int64_t val64;
+	if (json_read_int64(json, label, &val64) && val64 >= INT16_MIN && val64 <= INT16_MAX) {
+		*val = (int16_t)val64;
 		return true;
 	}
 	return false;
@@ -762,9 +806,9 @@ bool json_read_int16(json_t *json, const char *label, int16_t *val)
 
 bool json_read_uint16(json_t *json, const char *label, uint16_t *val)
 {
-	uint32_t val32;
-	if (json_read_uint32(json, label, &val32) && !(val32 & ~0xFFFF)) {
-		*val = (uint16_t)val32;
+	uint64_t val64;
+	if (json_read_uint64(json, label, &val64) && val64 <= UINT16_MAX) {
+		*val = (uint16_t)val64;
 		return true;
 	}
 	return false;
@@ -772,9 +816,9 @@ bool json_read_uint16(json_t *json, const char *label, uint16_t *val)
 
 bool json_read_int32(json_t *json, const char *label, int32_t *val)
 {
-	char str[64];
-	if (json__read_num(json, label, str)) {
-		*val = strtol(str, NULL, 10);
+	int64_t val64;
+	if (json_read_int64(json, label, &val64) && val64 >= INT32_MIN && val64 <= INT32_MAX) {
+		*val = (int32_t)val64;
 		return true;
 	}
 	return false;
@@ -782,18 +826,54 @@ bool json_read_int32(json_t *json, const char *label, int32_t *val)
 
 bool json_read_uint32(json_t *json, const char *label, uint32_t *val)
 {
-	char str[64];
-	if (json__read_num(json, label, str)) {
-		*val = strtoul(str, NULL, 10);
+	uint64_t val64;
+	if (json_read_uint64(json, label, &val64) && val64 <= UINT32_MAX) {
+		*val = (uint32_t)val64;
 		return true;
 	}
 	return false;
 }
 
+static
+bool json__read_decimal_number_string(json_t *json, const char *label, char str[64])
+{
+	char *p = str;
+	char *end = str + 64;
+
+	if (!json__read_label(json, label))
+		return false;
+
+	json__skip_whitespace(json);
+
+	if (!json__read_optional_negative(json, p, end, &p))
+		return false;
+
+	if (!json__read_digits(json, p, end, &p))
+		return false;
+
+	if (!json__read_decimal(json, p, end, &p))
+		goto out;
+
+	if (!json__read_digits(json, p, end, &p))
+		return false;
+
+	if (!json__read_exponent_symbol(json, p, end, &p))
+		goto out;
+
+	if (!json__read_optional_sign(json, p, end, &p))
+		return false;
+
+	if (!json__read_digits(json, p, end, &p))
+		return false;
+
+out:
+	return true;
+}
+
 bool json_read_float(json_t *json, const char *label, float *val)
 {
-	char str[64];
-	if (json__read_num(json, label, str)) {
+	char str[64] = {0};
+	if (json__read_decimal_number_string(json, label, str)) {
 		*val = strtof(str, NULL);
 		return true;
 	}
@@ -802,28 +882,49 @@ bool json_read_float(json_t *json, const char *label, float *val)
 
 bool json_read_int64(json_t *json, const char *label, int64_t *val)
 {
-	char str[64];
-	if (json__read_num(json, label, str)) {
-		*val = strtoll(str, NULL, 10);
-		return true;
-	}
-	return false;
+	/* 20 digits can hold 2^64-1, so 32 is plenty */
+	char str[32] = {0};
+	char *p = str;
+	char *end = str + sizeof(str);
+
+	if (!json__read_label(json, label))
+		return false;
+
+	json__skip_whitespace(json);
+
+	if (!json__read_optional_negative(json, p, end, &p))
+		return false;
+
+	if (!json__read_digits(json, p, end, &p))
+		return false;
+
+	*val = strtoll(str, NULL, 10);
+	return true;
 }
 
 bool json_read_uint64(json_t *json, const char *label, uint64_t *val)
 {
-	char str[64];
-	if (json__read_num(json, label, str)) {
-		*val = strtoull(str, NULL, 10);
-		return true;
-	}
-	return false;
+	/* 20 digits can hold 2^64-1, so 32 is plenty */
+	char str[32] = {0};
+	char *p = str;
+	char *end = str + sizeof(str);
+
+	if (!json__read_label(json, label))
+		return false;
+
+	json__skip_whitespace(json);
+
+	if (!json__read_digits(json, p, end, &p))
+		return false;
+
+	*val = strtoul(str, NULL, 10);
+	return true;
 }
 
 bool json_read_double(json_t *json, const char *label, double *val)
 {
-	char str[64];
-	if (json__read_num(json, label, str)) {
+	char str[64] = {0};
+	if (json__read_decimal_number_string(json, label, str)) {
 		*val = strtod(str, NULL);
 		return true;
 	}
