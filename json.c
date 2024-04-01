@@ -318,7 +318,7 @@ bool json_write_bool(json_t *json, const char *label, bool val)
 }
 
 static
-bool json__write_number(json_t *json, const char *label, char str[64], int len, int max)
+bool json__write_number(json_t *json, const char *label, const char *str, int len, int max)
 {
 	assert(len < max); /* If this is ever hit, the library needs a larger buffer  */
 	return len > 0
