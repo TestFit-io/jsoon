@@ -917,7 +917,7 @@ bool json_read_uint64(json_t *json, const char *label, uint64_t *val)
 	if (!json__read_digits(json, p, end, &p))
 		return false;
 
-	*val = strtoul(str, NULL, 10);
+	*val = strtoull(str, NULL, 10);
 	return true;
 }
 
