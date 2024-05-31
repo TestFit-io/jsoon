@@ -358,6 +358,8 @@ bool json_write_uint32(json_t *json, const char *label, uint32_t val)
 bool json_write_float(json_t *json, const char *label, float val)
 {
 	char str[64];
+	// CLEANUP - can write inf/-inf/nan, which is not legal JSON.
+	// See note in json__read_inf_or_nan.
 	int len = snprintf(str, 64, "%.9g", val); // FLT_DECIMAL_DIG=9
 	return json__write_number(json, label, str, len, 64);
 }
@@ -379,6 +381,8 @@ bool json_write_uint64(json_t *json, const char *label, uint64_t val)
 bool json_write_double(json_t *json, const char *label, double val)
 {
 	char str[64];
+	// CLEANUP - can write inf/-inf/nan, which is not legal JSON.
+	// See note in json__read_inf_or_nan.
 	int len = snprintf(str, 64, "%.17g", val); // DBL_DECIMAL_DIG=17
 	return json__write_number(json, label, str, len, 64);
 }
@@ -659,11 +663,49 @@ bool json__read_optional_char(json_t *json, const char *set, char *str, char *en
 	return true;
 }
 
+static
+bool json__read_optional_chars(json_t *json, const char *match, char *str, char *end, char **endptr)
+{
+	if (str >= end || strlen(match) > (size_t)(end - str)) {
+		assert(false && "output is not large enough to store requested match");
+		return false;
+	}
+	char *str_iter = str;
+	for (const char *match_iter = match; *match_iter; ++match_iter) {
+		*str_iter = json->io.fgetc(json->user);
+		if (*str_iter == EOF || *str_iter != *match_iter) {
+			// No match? Restore file pointer and clear out temp str writes.
+			while (str_iter >= str) {
+				json->io.ungetc(*str_iter, json->user);
+				*str_iter = 0;
+				--str_iter;
+			}
+			return false;
+		}
+		++str_iter;
+	}
+	*endptr = str_iter;
+	return true;
+}
 
 static
 bool json__read_optional_negative(json_t *json, char *str, char *end, char **endptr)
 {
 	return json__read_optional_char(json, "-", str, end, endptr);
+}
+
+static
+bool json__read_inf_or_nan(json_t *json, char *str, char *end, char **endptr)
+{
+	// Are these legal JSON number values? No. Does JSOON write them? Yes.
+	// The path of least resistance in order to avoid data loss for our customers
+	// is to pretend these are legal values and chug along. If the app was able
+	// to function when saving them it can probably handle them when read back
+	// out, and we can do better data cleanup as a post process with context
+	// than we can do here.
+	if (json__read_optional_chars(json, "inf", str, end, endptr))
+		return true;
+	return json__read_optional_chars(json, "nan", str, end, endptr);
 }
 
 static
@@ -847,6 +889,9 @@ bool json__read_decimal_number_string(json_t *json, const char *label, char str[
 
 	if (!json__read_optional_negative(json, p, end, &p))
 		return false;
+
+	if (json__read_inf_or_nan(json, p, end, &p))
+		goto out;
 
 	if (!json__read_digits(json, p, end, &p))
 		return false;
