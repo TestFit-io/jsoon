@@ -309,6 +309,12 @@ bool json_write_array_end(json_t *json)
 	return json__write_object_end(json, true);
 }
 
+bool json_write_null(json_t *json, const char *label)
+{
+	return json__write_label(json, label)
+	    && json->io.fwrite("null", 1, 4, json->user) == 4;
+}
+
 bool json_write_bool(json_t *json, const char *label, bool val)
 {
 	return json__write_label(json, label)
@@ -791,6 +797,15 @@ bool json_read_array_end(json_t *json)
 	json->cur = json->cur->prev;
 	--json->indent;
 	return json__read_past_whitespace(json) == ']';
+}
+
+bool json_read_null(json_t *json, const char *label)
+{
+	if (!json__read_label(json, label))
+		return false;
+
+	const char c = json__read_past_whitespace(json);
+	return c == 'n' && json__read_exact(json, "ull");
 }
 
 bool json_read_bool(json_t *json, const char *label, bool *val)
