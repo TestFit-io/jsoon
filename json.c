@@ -10,6 +10,8 @@
 
 #define json__min(a, b) ((a) < (b) ? (a) : (b))
 
+#define JSON__DOUBLE_BUFFER_SIZE 316 // printing -DBL_MAX takes 313 chars
+
 static
 int json__mem_fgetc(void *user)
 {
@@ -370,6 +372,15 @@ bool json_write_float(json_t *json, const char *label, float val)
 	return json__write_number(json, label, str, len, 64);
 }
 
+bool json_write_float_ex(json_t *json, const char *label, float val, int precision)
+{
+	char str[64];
+	// CLEANUP - can write inf/-inf/nan, which is not legal JSON.
+	// See note in json__read_inf_or_nan.
+	int len = snprintf(str, 64, "%.*f", precision, val);
+	return json__write_number(json, label, str, len, 64);
+}
+
 bool json_write_int64(json_t *json, const char *label, int64_t val)
 {
 	char str[64];
@@ -391,6 +402,15 @@ bool json_write_double(json_t *json, const char *label, double val)
 	// See note in json__read_inf_or_nan.
 	int len = snprintf(str, 64, "%.17g", val); // DBL_DECIMAL_DIG=17
 	return json__write_number(json, label, str, len, 64);
+}
+
+bool json_write_double_ex(json_t *json, const char *label, double val, int precision)
+{
+	char str[JSON__DOUBLE_BUFFER_SIZE];
+	// CLEANUP - can write inf/-inf/nan, which is not legal JSON.
+	// See note in json__read_inf_or_nan.
+	int len = snprintf(str, JSON__DOUBLE_BUFFER_SIZE, "%.*f", precision, val);
+	return json__write_number(json, label, str, len, JSON__DOUBLE_BUFFER_SIZE);
 }
 
 bool json_write_char(json_t *json, const char *label, char val)
@@ -889,10 +909,10 @@ bool json_read_uint32(json_t *json, const char *label, uint32_t *val)
 }
 
 static
-bool json__read_decimal_number_string(json_t *json, const char *label, char str[64])
+bool json__read_decimal_number_string(json_t *json, const char *label, char *str, size_t n)
 {
 	char *p = str;
-	char *end = str + 64;
+	char *end = str + n;
 
 	if (!json__read_label(json, label))
 		return false;
@@ -934,7 +954,7 @@ out:
 bool json_read_float(json_t *json, const char *label, float *val)
 {
 	char str[64] = {0};
-	if (json__read_decimal_number_string(json, label, str)) {
+	if (json__read_decimal_number_string(json, label, str, 64)) {
 		*val = strtof(str, NULL);
 		return true;
 	}
@@ -984,8 +1004,8 @@ bool json_read_uint64(json_t *json, const char *label, uint64_t *val)
 
 bool json_read_double(json_t *json, const char *label, double *val)
 {
-	char str[64] = {0};
-	if (json__read_decimal_number_string(json, label, str)) {
+	char str[JSON__DOUBLE_BUFFER_SIZE] = {0};
+	if (json__read_decimal_number_string(json, label, str, JSON__DOUBLE_BUFFER_SIZE)) {
 		*val = strtod(str, NULL);
 		return true;
 	}
