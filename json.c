@@ -332,7 +332,7 @@ bool json__write_number(json_t *json, const char *label, const char *str, int le
 	return len > 0
 	    && len < max
 	    && json__write_label(json, label)
-	    && json->io.fwrite(str, 1, len, json->user) == len;
+	    && json->io.fwrite(str, 1, len, json->user) == (size_t)len;
 }
 
 bool json_write_int16(json_t *json, const char *label, int16_t val)
