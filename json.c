@@ -602,6 +602,40 @@ bool json__read_escape(json_t *json, char *str, size_t max, size_t *advance)
 #define JSON__READ_STR_ERROR_DATA -1
 
 static
+size_t json__fixup_utf8_truncation(char *str, size_t len)
+{
+	/* No-op for empty strings or when the last character is ascii. */
+	if (len == 0 || !(str[len - 1] & 0x80))
+		return len;
+
+	/* Scan backward through continuation bytes (10xxxxxx) to find the lead byte.
+	 * A UTF-8 sequence is at most 4 bytes, so at most 3 continuation bytes. */
+	size_t n = 0;
+	while (n < 3 && n + 1 < len && (str[len - 1 - n] & 0xc0) == 0x80)
+		++n;
+
+	const size_t lead_pos = len - 1 - n;
+	const char lead = str[lead_pos];
+	size_t expected = 0;
+	if ((lead & 0xe0) == 0xc0) {
+		expected = 2;
+	} else if ((lead & 0xf0) == 0xe0) {
+		expected = 3;
+	} else if ((lead & 0xf8) == 0xf0) {
+		expected = 4;
+	} else {
+		return len;
+	}
+
+	if (lead_pos + expected > len) {
+		str[lead_pos] = 0;
+		return lead_pos;
+	}
+
+	return len;
+}
+
+static
 bool json__read_char(json_t *json, char *str, size_t max, size_t *advance, bool part, int *err)
 {
 	/* Allow 5 bytes for a 4-byte utf8 character and the NULL terminator.
@@ -669,6 +703,13 @@ bool json__read_str(json_t *json, char *str, size_t max, size_t *len, bool part,
 		--p;
 	*p = 0;
 	*len = p - str;
+	/* Only fixup truncated UTF8 bytes if we're done reading. */
+	if (*err != JSON__READ_STR_ERROR_MORE) {
+		/* Ideally we would return false if the data was invalid, but
+		 * historically this API would pass back invalid strings while
+		 * returning true.  The compromise is to fix the string silently. */
+		*len = json__fixup_utf8_truncation(str, *len);
+	}
 	return success;
 }
 
