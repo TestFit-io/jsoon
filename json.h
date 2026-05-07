@@ -94,6 +94,8 @@ bool json_read_int64(json_t *json, const char *label, int64_t *val);
 bool json_read_uint64(json_t *json, const char *label, uint64_t *val);
 bool json_read_double(json_t *json, const char *label, double *val);
 bool json_read_char(json_t *json, const char *label, char *val);
+/* These do some basic invalid string checks (checking for null bytes,
+ * ascii control characters, etc. but may return true with invalid UTF8 data. */
 bool json_read_str(json_t *json, const char *label, char *val, size_t max);
 bool json_read_strn(json_t *json, const char *label, char *val, size_t n);
 bool json_read_str_part(json_t *json, const char *label, char *val, size_t max, size_t *len, bool *more);
