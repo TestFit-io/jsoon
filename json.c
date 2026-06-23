@@ -220,9 +220,9 @@ static
 bool json__write_colon(json_t *json)
 {
 #if JSON_PRETTY_PRINT
-	return json->io.fwrite(": ", 1, 2, json->user);
+	return json->io.fwrite(": ", 1, 2, json->user) == 2;
 #else
-	return json->io.fputc(':', json->user);
+	return json->io.fputc(':', json->user) != EOF;
 #endif
 }
 
