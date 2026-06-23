@@ -320,9 +320,9 @@ bool json_write_null(json_t *json, const char *label)
 bool json_write_bool(json_t *json, const char *label, bool val)
 {
 	return json__write_label(json, label)
-	    &&   val
-	       ? json->io.fwrite("true", 1, 4, json->user) == 4
-	       : json->io.fwrite("false", 1, 5, json->user) == 5;
+	    && (  val
+	        ? json->io.fwrite("true", 1, 4, json->user) == 4
+	        : json->io.fwrite("false", 1, 5, json->user) == 5);
 }
 
 static
