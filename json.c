@@ -772,7 +772,6 @@ bool json__read_inf_or_nan(json_t *json, char *str, char *end, char **endptr,
 	// Calling ungetc for multiple characters on a file handle is undefined
 	// behavior - just fail if we only get the start of inf/nan.
 	if (json__read_optional_char(json, "n", str, end, endptr) && *str == 'n') {
-		str = *endptr;
 		if (   !json__read_required_char(json, "a", *endptr, end, endptr)
 		    || !json__read_required_char(json, "n", *endptr, end, endptr))
 			return false;
@@ -780,7 +779,6 @@ bool json__read_inf_or_nan(json_t *json, char *str, char *end, char **endptr,
 		return true;
 	}
 	if (json__read_optional_char(json, "i", str, end, endptr) && *str == 'i') {
-		str = *endptr;
 		if (   !json__read_required_char(json, "n", *endptr, end, endptr)
 		    || !json__read_required_char(json, "f", *endptr, end, endptr))
 			return false;
