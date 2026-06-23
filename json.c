@@ -374,11 +374,11 @@ bool json_write_float(json_t *json, const char *label, float val)
 
 bool json_write_float_ex(json_t *json, const char *label, float val, int precision)
 {
-	char str[64];
+	char str[JSON__DOUBLE_BUFFER_SIZE];
 	// CLEANUP - can write inf/-inf/nan, which is not legal JSON.
 	// See note in json__read_inf_or_nan.
-	int len = snprintf(str, 64, "%.*f", precision, val);
-	return json__write_number(json, label, str, len, 64);
+	int len = snprintf(str, JSON__DOUBLE_BUFFER_SIZE, "%.*f", precision, val);
+	return json__write_number(json, label, str, len, JSON__DOUBLE_BUFFER_SIZE);
 }
 
 bool json_write_int64(json_t *json, const char *label, int64_t val)
