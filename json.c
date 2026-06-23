@@ -1053,7 +1053,7 @@ bool json_read_double(json_t *json, const char *label, double *val)
 
 bool json_read_char(json_t *json, const char *label, char *val)
 {
-	char str[2];
+	char str[2] = {0};
 	return json_read_str(json, label, str, 2)
 	    && str[1] == 0
 	    && (*val = str[0]) != 0;
